@@ -28,6 +28,11 @@ arquitectura_opciones.tex
 *.aux
 *.log
 
+# Graphify analysis output (too large, re-run locally with 'graphify .')
+graphify-out/cache/
+graphify-out/*.html
+graphify-out/graph.json
+
 # Testing
 .pytest_cache/
 .coverage
