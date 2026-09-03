@@ -1,5 +1,14 @@
+# Calculo numerico y valuacion
 numpy>=2.0
-pandas>=2.2
-matplotlib>=3.9
 scipy>=1.13
+
+# Graficos
+matplotlib>=3.9
+
+# Exportacion
 openpyxl>=3.1
+reportlab>=4.0
+
+# Solo lo usa app.py, la interfaz Tkinter vieja. Se elimina en la Fase 6:
+# los exportadores nuevos usan csv y json de la biblioteca estandar.
+pandas>=2.2

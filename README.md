@@ -49,7 +49,7 @@ El plan completo, las decisiones de diseño y el porqué de cada paso están en
 | 1 · Dominio puro | ✅ |
 | 2 · Puertos | ✅ |
 | 3 · Casos de uso | ✅ |
-| 4 · Adaptadores | ⬜ |
+| 4 · Adaptadores | ✅ |
 | 5 · Interfaz Flet | ⬜ |
 | 6 · Limpieza | ⬜ |
 | 7 · Persistencia SQLite | ⬜ |

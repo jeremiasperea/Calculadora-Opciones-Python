@@ -176,7 +176,7 @@ ningún adaptador real**. Se prueban con *fakes* escritos a mano.
 lógica de negocio se testea en milisegundos sin SciPy, sin base de datos y sin
 interfaz gráfica.
 
-### Fase 4 — Adaptadores
+### Fase 4 — Adaptadores ✅ COMPLETA
 
 `infrastructure/`: `BSMPricingEngine`, `TemplateRepository`, `FileExporter`
 (CSV/Excel/**JSON**/PDF), `SQLitePersistence`.
