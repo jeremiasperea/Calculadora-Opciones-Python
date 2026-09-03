@@ -24,6 +24,7 @@ def render_payoff_png(
     width: float = 8.0,
     height: float = 4.5,
     dpi: int = 150,
+    ylim: tuple[float, float] | None = None,
 ) -> bytes:
     """Dibuja el perfil de resultado al vencimiento y lo devuelve como PNG.
 
@@ -31,6 +32,13 @@ def render_payoff_png(
     distintos: el exportador de PDF y la pantalla. Duplicar el dibujo llevaria
     a que el reporte impreso y lo que se ve en la aplicacion se fueran
     separando con cada retoque, que es peor que la dependencia compartida.
+
+    El limite vertical (`ylim`) es opcional y solo afecta lo que se ve: la
+    curva ya esta calculada. El limite horizontal, en cambio, no se pasa aca —
+    se decide antes, al elegir sobre que precios calcular, porque cambiarlo
+    cambia los numeros. Esa asimetria es real y conviene tenerla presente:
+    ampliar el eje Y es mirar mejor lo mismo; ampliar el X es calcular otra
+    cosa.
 
     Las decisiones de color no son decorativas. Verde donde gana y rojo donde
     pierde se lee antes que cualquier numero: quien opera reconoce la forma de
@@ -54,6 +62,9 @@ def render_payoff_png(
 
         for be in resultado.breakevens:
             ejes.axvline(be, color=COLOR_BREAKEVEN, linestyle=":", linewidth=1.0)
+
+        if ylim is not None:
+            ejes.set_ylim(*ylim)
 
         ejes.set_xlabel("Precio del subyacente al vencimiento")
         ejes.set_ylabel("P&L")

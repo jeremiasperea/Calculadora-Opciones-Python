@@ -53,27 +53,93 @@ class TestCasosBasicos:
 
 
 class TestCasosBorde:
-    def test_el_ultimo_punto_no_se_evalua(self):
-        """Limitacion heredada del codigo original, preservada a proposito.
+    def test_un_cero_en_el_ultimo_punto_si_se_detecta(self):
+        """Esto antes no funcionaba.
 
-        El recorrido mira pares consecutivos, asi que un cero exacto en el
-        ultimo punto de la grilla no se detecta. En la practica no molesta: la
-        grilla va de 0.5x a 1.5x del spot y el borde es zona de perdida o
-        ganancia plana, no de cruce.
+        La version original recorria pares y solo miraba el primero de cada
+        uno, asi que un cero exacto en el ultimo punto de la grilla quedaba
+        afuera. Se habia documentado como limitacion heredada durante la
+        Fase 1, que migraba sin cambiar resultados.
 
-        Se documenta como comportamiento conocido y no se corrige, porque la
-        Fase 1 migra sin cambiar resultados. Cambiar esto ahora haria que un
-        numero distinto pudiera atribuirse a la migracion.
+        Al reescribir la funcion para manejar las mesetas en cero, el caso
+        quedo resuelto de paso: ahora se comparan los signos de los dos
+        extremos de cada par, asi que la transicion de perder a no-perder se
+        detecta este donde este.
         """
         precios = np.array([900.0, 1000.0])
         pnl = np.array([-50.0, 0.0])
-        assert find_breakevens(precios, pnl) == []
+        assert find_breakevens(precios, pnl) == pytest.approx([1000.0])
 
-    def test_curva_pegada_al_cero_sin_cruzar(self):
+    def test_un_punto_aislado_en_cero(self):
+        """Toca cero y vuelve a ganar: un solo punto, no dos."""
         precios = np.array([900.0, 1000.0, 1100.0])
         pnl = np.array([5.0, 0.0, 5.0])
-        # El cero exacto en el medio cuenta como punto de equilibrio
         assert find_breakevens(precios, pnl) == pytest.approx([1000.0])
+
+
+class TestZonasPlanasEnCero:
+    """Tramos enteros donde el P&L vale exactamente cero.
+
+    Aparecen cuando el credito neto de la estrategia es cero: en las alas no
+    se gana ni se pierde nada. El Butterfly Call de las plantillas es asi
+    (-70 + 90 - 20 = 0).
+
+    El detector original agregaba un break-even por CADA punto en cero. Sobre
+    una grilla de 401 puntos eso daba 361 break-evens, y la pantalla mostraba
+    una lista ilegible en lugar de dos numeros.
+
+    Un break-even es donde la curva CAMBIA entre ganar y no ganar, no cada
+    lugar donde toca el cero. Una meseta en cero tiene dos bordes, no
+    trescientos puntos.
+    """
+
+    def test_una_meseta_reporta_solo_sus_bordes(self):
+        precios = np.array([900.0, 950.0, 1000.0, 1050.0, 1100.0])
+        pnl = np.array([0.0, 0.0, 50.0, 0.0, 0.0])
+
+        be = find_breakevens(precios, pnl)
+        assert be == pytest.approx([950.0, 1050.0])
+
+    def test_una_meseta_larga_sigue_dando_dos(self):
+        """Con mas resolucion, la respuesta no cambia."""
+        precios = np.linspace(500.0, 1500.0, 401)
+        pnl = np.where((precios > 950) & (precios < 1050), 50.0, 0.0)
+
+        assert len(find_breakevens(precios, pnl)) == 2
+
+    def test_todo_en_cero_no_tiene_breakevens(self):
+        """Si nunca gana ni pierde, no hay punto de equilibrio que marcar."""
+        precios = np.linspace(900.0, 1100.0, 21)
+        assert find_breakevens(precios, np.zeros(21)) == []
+
+    def test_meseta_entre_perdida_y_ganancia(self):
+        """De perder a ni-ni a ganar: dos transiciones."""
+        precios = np.array([900.0, 950.0, 1000.0, 1050.0, 1100.0])
+        pnl = np.array([-30.0, 0.0, 0.0, 0.0, 40.0])
+
+        be = find_breakevens(precios, pnl)
+        assert len(be) == 2
+        assert be[0] == pytest.approx(950.0, abs=25.0)
+        assert be[1] == pytest.approx(1050.0, abs=25.0)
+
+
+class TestButterflyReal:
+    """El caso que aparecio en la pantalla."""
+
+    def test_reporta_dos_breakevens_y_no_trescientos(self):
+        from domain.entities.leg import Leg
+
+        butterfly = Strategy([
+            Leg("CALL", "COMPRA", 1, 950, 70),
+            Leg("CALL", "VENTA", 2, 1000, 45),
+            Leg("CALL", "COMPRA", 1, 1050, 20),
+        ])
+        precios = np.linspace(500.0, 1500.0, 401)
+
+        be = find_breakevens(precios, butterfly.payoff(precios))
+        assert len(be) == 2
+        assert be[0] == pytest.approx(950.0, abs=3.0)
+        assert be[1] == pytest.approx(1050.0, abs=3.0)
 
 
 class TestContraLosValoresDeReferencia:

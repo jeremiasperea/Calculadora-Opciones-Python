@@ -124,6 +124,33 @@ class MainView:
         )
         self.mensaje = ft.Text("", color=ft.Colors.RED_700, size=12)
 
+        # --- escala del grafico ---
+        #
+        # El eje X define sobre que precios se calcula, asi que cambiarlo
+        # rehace las cuentas. El eje Y es solo la ventana por la que se mira
+        # una curva que ya existe. Los dos se cargan igual, pero no cuestan lo
+        # mismo.
+        self.escala_automatica = ft.Checkbox(
+            label="Escala automatica", value=True,
+        )
+        self.campo_x_min = ft.TextField(
+            label="X desde", dense=True, width=105, text_size=13, disabled=True,
+        )
+        self.campo_x_max = ft.TextField(
+            label="X hasta", dense=True, width=105, text_size=13, disabled=True,
+        )
+        self.campo_y_min = ft.TextField(
+            label="Y desde", dense=True, width=105, text_size=13,
+            hint_text="auto",
+        )
+        self.campo_y_max = ft.TextField(
+            label="Y hasta", dense=True, width=105, text_size=13,
+            hint_text="auto",
+        )
+        self.boton_aplicar_escala = ft.OutlinedButton(
+            "Aplicar escala", icon=ft.Icons.ZOOM_IN, width=170,
+        )
+
     # ---- construccion de controles -------------------------------------
 
     def _crear_campos_mercado(self) -> None:
@@ -173,6 +200,7 @@ class MainView:
                 self._seccion("Estrategia", self._grilla_patas()),
                 ft.Row([self.boton_calcular, self.boton_exportar], spacing=8),
                 ft.Row([self.boton_guardar, self.boton_biblioteca], spacing=8),
+                self._seccion("Escala del grafico", self._grilla_escala()),
                 self.mensaje,
                 self._seccion("Resultado", self._panel_metricas()),
             ], spacing=14, scroll=ft.ScrollMode.AUTO),
@@ -223,6 +251,14 @@ class MainView:
             for f in self.filas_patas
         ]
         return ft.Column([encabezado, *filas], spacing=5)
+
+    def _grilla_escala(self) -> ft.Control:
+        return ft.Column([
+            self.escala_automatica,
+            ft.Row([self.campo_x_min, self.campo_x_max], spacing=8),
+            ft.Row([self.campo_y_min, self.campo_y_max], spacing=8),
+            self.boton_aplicar_escala,
+        ], spacing=8)
 
     def _panel_metricas(self) -> ft.Control:
         def linea(nombre: str) -> ft.Control:
@@ -351,3 +387,17 @@ class MainView:
         }
         for clave, valor in valores.items():
             self.campos_mercado[clave].value = f"{valor:g}"
+
+    def set_rango_x(self, desde: float, hasta: float) -> None:
+        """Muestra el rango de precios que se uso.
+
+        Se llama tambien en modo automatico, para que el operador vea sobre
+        que se calculo. Un campo deshabilitado y vacio no dice nada; uno
+        deshabilitado con el valor adentro explica que hizo el programa.
+        """
+        self.campo_x_min.value = f"{desde:,.2f}"
+        self.campo_x_max.value = f"{hasta:,.2f}"
+
+    def set_escala_editable(self, editable: bool) -> None:
+        self.campo_x_min.disabled = not editable
+        self.campo_x_max.disabled = not editable

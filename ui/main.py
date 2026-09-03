@@ -123,11 +123,16 @@ def main(page: ft.Page) -> None:
 
     # --- conexion de eventos ---
     view.boton_calcular.on_click = lambda _: controller.calcular()
+    view.boton_aplicar_escala.on_click = lambda _: controller.aplicar_escala()
+    view.escala_automatica.on_change = lambda _: controller.aplicar_escala()
     view.boton_guardar.on_click = abrir_dialogo_guardar
     view.boton_biblioteca.on_click = abrir_biblioteca
     view.boton_exportar.on_click = abrir_dialogo_exportar
-    view.selector_plantilla.on_change = (
-        lambda e: controller.cargar_plantilla(e.control.value)
+    # on_select y no on_change: en Flet 0.86 el Dropdown avisa por on_select.
+    # Asignar on_change no da error —Python acepta cualquier atributo— pero el
+    # evento nunca se dispara y el selector queda mudo.
+    view.selector_plantilla.on_select = (
+        lambda e: controller.cargar_plantilla(view.selector_plantilla.value)
     )
 
     page.add(

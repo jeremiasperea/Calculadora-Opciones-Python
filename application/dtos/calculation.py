@@ -1,11 +1,20 @@
 """Objetos de entrada y salida del caso de uso de calculo."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 import numpy as np
 
 from domain.entities.greeks import Greeks
+
+# Cuanto se muestra mas alla del strike mas lejano, para que se vea que la
+# curva sigue y no parezca que termina ahi.
+MARGEN_POR_DEFECTO = 0.10
+
+if TYPE_CHECKING:
+    from domain.entities.strategy import Strategy
 
 
 @dataclass(frozen=True)
@@ -34,6 +43,40 @@ class PriceRange:
             )
         if self.points < 2:
             raise ValueError(f"Se necesitan al menos 2 puntos, se recibio {self.points}")
+
+    @classmethod
+    def auto(
+        cls,
+        strategy: "Strategy",
+        spot: float,
+        margen: float = MARGEN_POR_DEFECTO,
+        points: int = 401,
+    ) -> "PriceRange":
+        """Rango que cubre todos los strikes y el spot, con un margen.
+
+        El rango fijo de 0.5x a 1.5x alcanza mientras los strikes esten cerca
+        del precio actual. Deja de alcanzar apenas alguien carga uno lejano:
+        con spot 1000 y un strike en 1500, la curva se corta justo en el punto
+        donde la estrategia cambia de forma.
+
+        El spot entra en la cuenta ademas de los strikes. Sin eso, una
+        estrategia con todos los strikes muy por encima del precio actual
+        dibujaria una curva que no incluye donde esta el subyacente hoy, que
+        es la referencia principal de quien mira el grafico.
+
+        El margen se aplica a cada extremo, para que se vea que pasa mas alla
+        del ultimo strike y no quede la impresion de que la curva termina ahi.
+        """
+        strikes = [leg.strike for leg in strategy.legs]
+        minimo = min(min(strikes), spot) * (1.0 - margen)
+        maximo = max(max(strikes), spot) * (1.0 + margen)
+
+        # Con margen cero y un unico strike igual al spot, los dos extremos
+        # coincidirian y el grafico tendria ancho nulo.
+        if maximo <= minimo:
+            minimo, maximo = spot * 0.99, spot * 1.01
+
+        return cls(minimo / spot, maximo / spot, points)
 
     def prices_around(self, spot: float) -> np.ndarray:
         return np.linspace(spot * self.min_factor, spot * self.max_factor, self.points)

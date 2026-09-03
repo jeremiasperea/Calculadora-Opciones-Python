@@ -146,7 +146,7 @@ class TestEventosConectados:
                             lambda: vistas.append(original()) or vistas[-1])
         ui.main.main(PageFalsa())
 
-        assert vistas[0].selector_plantilla.on_change is not None
+        assert vistas[0].selector_plantilla.on_select is not None
 
     def test_los_dialogos_tienen_botones(self, tmp_path, monkeypatch):
         """AlertDialog sin actions es un dialogo del que no se puede salir."""
@@ -187,3 +187,75 @@ class TestFilePicker:
         ui.main.main(PageFalsa())
 
         assert inspect.iscoroutinefunction(vistas[0].boton_exportar.on_click)
+
+
+class TestLosEventosExISTEN:
+    """Cada manejador asignado corresponde a un evento real del control.
+
+    Este test existe por un segundo error que llego al usuario: el selector de
+    plantillas no hacia nada. La causa era que se le asignaba `on_change`, y en
+    Flet 0.86 el Dropdown avisa por `on_select`.
+
+    Python no protesta al asignar un atributo que la clase no declara, asi que
+    la linea corria sin error y el evento nunca se disparaba. El test anterior
+    verificaba `on_change is not None`, que era verdadero justamente porque
+    acababa de asignarlo — comprobaba su propia accion, no que sirviera.
+
+    La forma correcta es preguntarle a la clase que eventos acepta. Eso
+    detecta el problema entero: cualquier manejador conectado a un evento que
+    no existe.
+    """
+
+    def _vista_armada(self, tmp_path, monkeypatch):
+        import ui.main
+
+        monkeypatch.setattr(ui.main, "BASE_DE_DATOS", tmp_path / "t.db")
+        vistas = []
+        original = ui.main.MainView
+        monkeypatch.setattr(ui.main, "MainView",
+                            lambda: vistas.append(original()) or vistas[-1])
+        ui.main.main(PageFalsa())
+        return vistas[0]
+
+    def test_todo_manejador_corresponde_a_un_evento_del_control(
+        self, tmp_path, monkeypatch
+    ):
+        import inspect
+
+        vista = self._vista_armada(tmp_path, monkeypatch)
+
+        controles = {
+            "boton_calcular": vista.boton_calcular,
+            "boton_exportar": vista.boton_exportar,
+            "boton_guardar": vista.boton_guardar,
+            "boton_biblioteca": vista.boton_biblioteca,
+            "selector_plantilla": vista.selector_plantilla,
+        }
+
+        for nombre, control in controles.items():
+            eventos_reales = {
+                p for p in inspect.signature(type(control).__init__).parameters
+                if p.startswith("on_")
+            }
+            asignados = {
+                atributo for atributo in vars(control)
+                if atributo.startswith("on_") and getattr(control, atributo) is not None
+            }
+            inventados = asignados - eventos_reales
+            assert not inventados, (
+                f"{nombre} ({type(control).__name__}) tiene manejadores en "
+                f"{sorted(inventados)}, que no son eventos de ese control. "
+                f"Los que acepta son: {sorted(eventos_reales)}"
+            )
+
+    def test_el_selector_usa_on_select(self, tmp_path, monkeypatch):
+        """Explicito, porque es el que fallo."""
+        import inspect
+
+        vista = self._vista_armada(tmp_path, monkeypatch)
+        eventos = {p for p in inspect.signature(ft.Dropdown.__init__).parameters
+                   if p.startswith("on_")}
+
+        assert "on_select" in eventos
+        assert "on_change" not in eventos
+        assert vista.selector_plantilla.on_select is not None

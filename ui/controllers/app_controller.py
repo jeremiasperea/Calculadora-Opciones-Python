@@ -12,7 +12,7 @@ from application.use_cases.load_template import LoadTemplateUseCase
 from application.use_cases.simulation_library import SimulationLibraryUseCase
 from infrastructure.charts.payoff_chart import render_payoff_png
 from ui.mappers.form_mapper import (
-    FormError, LegForm, MarketForm, to_market, to_strategy,
+    FormError, LegForm, MarketForm, _leer, to_market, to_strategy,
 )
 from ui.views.main_view import MainView
 
@@ -86,11 +86,23 @@ class AppController:
             self._error(str(e))
             return
 
-        resultado = self._calcular.execute(estrategia, mercado, PriceRange())
+        try:
+            rango = self._resolver_rango(estrategia, mercado.spot)
+            ylim = self._leer_limite_vertical()
+        except FormError as e:
+            self._error(str(e))
+            return
+
+        resultado = self._calcular.execute(estrategia, mercado, rango)
         self._ultimo = SimulationSnapshot(estrategia, mercado, resultado)
 
+        # Se muestra el rango que se termino usando, incluso en automatico:
+        # asi el operador ve sobre que precios se calculo.
+        self._view.set_rango_x(float(resultado.prices[0]), float(resultado.prices[-1]))
+        self._view.set_escala_editable(not self._view.escala_automatica.value)
+
         self._pintar_metricas(resultado)
-        self._pintar_grafico()
+        self._pintar_grafico(ylim)
         self._pintar_escenarios(resultado)
         self._view.set_mensaje("")
         self._refrescar()
@@ -176,8 +188,8 @@ class AppController:
         ]:
             self._view.set_metrica(nombre, f"{valor:,.4f}")
 
-    def _pintar_grafico(self) -> None:
-        png = render_payoff_png(self._ultimo, width=9.0, height=5.0, dpi=110)
+    def _pintar_grafico(self, ylim: tuple[float, float] | None = None) -> None:
+        png = render_payoff_png(self._ultimo, width=9.0, height=5.0, dpi=110, ylim=ylim)
         self._view.set_grafico(base64.b64encode(png).decode("ascii"))
 
     def _pintar_escenarios(self, r: CalculationResult) -> None:
@@ -263,3 +275,60 @@ class AppController:
             self._error("Esa simulacion ya no existe.")
             return
         self._refrescar()
+
+    # ---- escala del grafico ---------------------------------------------
+
+    def aplicar_escala(self) -> None:
+        """Vuelve a dibujar con la escala cargada.
+
+        Si cambio el eje X hay que recalcular, porque define sobre que precios
+        se evalua la estrategia. Si solo cambio el Y alcanzaria con redibujar,
+        pero recalcular igual cuesta milisegundos y evita tener dos caminos
+        que puedan desincronizarse. Se prefiere el codigo simple mientras el
+        costo no se note.
+        """
+        self.calcular()
+
+    def _resolver_rango(self, estrategia, spot: float) -> PriceRange:
+        """El rango de precios sobre el que se calcula.
+
+        En automatico se deriva de los strikes: con un strike lejano, el rango
+        fijo de 0.5x a 1.5x cortaria la curva justo donde cambia de forma.
+        """
+        if self._view.escala_automatica.value:
+            return PriceRange.auto(estrategia, spot)
+
+        desde = _leer(self._view.campo_x_min.value or "", "el inicio del eje X")
+        hasta = _leer(self._view.campo_x_max.value or "", "el fin del eje X")
+
+        if desde <= 0:
+            raise FormError("El inicio del eje X debe ser mayor que cero.")
+        if hasta <= desde:
+            raise FormError("El fin del eje X debe ser mayor que el inicio.")
+
+        return PriceRange(desde / spot, hasta / spot, PriceRange().points)
+
+    def _leer_limite_vertical(self) -> tuple[float, float] | None:
+        """Limite del eje Y, o None para que lo elija matplotlib.
+
+        Los dos campos vacios significan automatico. Uno solo cargado tambien,
+        porque un limite a medias no define una ventana: se avisa en lugar de
+        adivinar el otro extremo.
+        """
+        texto_min = (self._view.campo_y_min.value or "").strip()
+        texto_max = (self._view.campo_y_max.value or "").strip()
+
+        if not texto_min and not texto_max:
+            return None
+        if not texto_min or not texto_max:
+            raise FormError(
+                "Para fijar el eje Y hay que completar los dos extremos, "
+                "o dejar los dos vacios para escala automatica."
+            )
+
+        desde = _leer(texto_min, "el inicio del eje Y")
+        hasta = _leer(texto_max, "el fin del eje Y")
+        if hasta <= desde:
+            raise FormError("El fin del eje Y debe ser mayor que el inicio.")
+
+        return (desde, hasta)

@@ -320,3 +320,162 @@ class TestSimulacionesGuardadas:
         lista = controlador.listar_simulaciones()
         assert len(lista) == 2
         assert lista[0].id != lista[1].id
+
+
+class TestEscalaDelGrafico:
+    """El rango que se dibuja, automatico o cargado a mano."""
+
+    def _cargar_strike_lejano(self, vista, controlador):
+        """Un call comprado con strike 1500 sobre un spot de 1000."""
+        fila = vista.filas_patas[0]
+        fila["option_type"].value = "CALL"
+        fila["side"].value = "COMPRA"
+        fila["quantity"].value = "1"
+        fila["strike"].value = "1500"
+        fila["premium"].value = "5"
+        for otra in vista.filas_patas[1:]:
+            otra["quantity"].value = "0"
+        controlador.calcular()
+
+    def test_el_automatico_cubre_los_strikes_lejanos(self, entorno):
+        """El caso que motivo esto.
+
+        Con el rango fijo de 0.5x a 1.5x, un strike en 1500 sobre spot 1000
+        quedaba justo en el borde: la curva se cortaba donde la estrategia
+        recien empieza a cambiar de forma.
+        """
+        vista, controlador, _ = entorno
+        self._cargar_strike_lejano(vista, controlador)
+
+        assert vista.campo_x_max.value == "1,650.00"   # 1500 + 10%
+        assert vista.mensaje.value == ""
+
+    def test_muestra_el_rango_usado_aunque_sea_automatico(self, entorno):
+        """Un campo deshabilitado y vacio no explica nada."""
+        vista, controlador, _ = entorno
+        controlador.cargar_plantilla("Iron Condor")
+
+        assert vista.campo_x_min.value
+        assert vista.campo_x_max.value
+        assert vista.campo_x_min.disabled is True
+
+    def test_en_manual_se_respeta_lo_cargado(self, entorno):
+        vista, controlador, _ = entorno
+        controlador.cargar_plantilla("Long Call")
+
+        vista.escala_automatica.value = False
+        vista.campo_x_min.value = "980"
+        vista.campo_x_max.value = "1020"
+        controlador.aplicar_escala()
+
+        assert vista.campo_x_min.value == "980.00"
+        assert vista.campo_x_max.value == "1,020.00"
+        assert vista.campo_x_min.disabled is False
+
+    def test_el_rango_manual_afecta_las_metricas(self, entorno):
+        """Cambiar el eje X no es solo mirar: cambia sobre que se calcula.
+
+        Un rango angosto puede dejar afuera la zona donde la estrategia pierde
+        mas, y entonces la perdida maxima informada es la del tramo visible.
+        """
+        vista, controlador, _ = entorno
+        controlador.cargar_plantilla("Long Call")
+        amplio = vista.metricas["Perdida maxima"].value
+
+        vista.escala_automatica.value = False
+        vista.campo_x_min.value = "1100"
+        vista.campo_x_max.value = "1200"
+        controlador.aplicar_escala()
+
+        assert vista.metricas["Perdida maxima"].value != amplio
+
+    def test_un_rango_invertido_avisa(self, entorno):
+        vista, controlador, _ = entorno
+        controlador.cargar_plantilla("Long Call")
+
+        vista.escala_automatica.value = False
+        vista.campo_x_min.value = "1200"
+        vista.campo_x_max.value = "800"
+        controlador.aplicar_escala()
+
+        assert "mayor que el inicio" in vista.mensaje.value.lower()
+
+    def test_texto_en_el_rango_avisa(self, entorno):
+        vista, controlador, _ = entorno
+        controlador.cargar_plantilla("Long Call")
+
+        vista.escala_automatica.value = False
+        vista.campo_x_min.value = "ochocientos"
+        vista.campo_x_max.value = "1200"
+        controlador.aplicar_escala()
+
+        assert "no es un numero" in vista.mensaje.value.lower()
+
+
+class TestZoomVertical:
+    """El eje Y es solo la ventana por la que se mira: no cambia los numeros."""
+
+    def test_vacio_significa_automatico(self, entorno):
+        vista, controlador, _ = entorno
+        controlador.cargar_plantilla("Iron Condor")
+        assert vista.mensaje.value == ""
+
+    def test_no_cambia_las_metricas(self, entorno):
+        """Acotar el eje Y recorta el dibujo, no el calculo."""
+        vista, controlador, _ = entorno
+        controlador.cargar_plantilla("Iron Condor")
+        antes = vista.metricas["Perdida maxima"].value
+
+        vista.campo_y_min.value = "-5"
+        vista.campo_y_max.value = "5"
+        controlador.aplicar_escala()
+
+        assert vista.metricas["Perdida maxima"].value == antes
+
+    def test_cambia_el_grafico(self, entorno):
+        vista, controlador, _ = entorno
+        controlador.cargar_plantilla("Iron Condor")
+        sin_zoom = vista.grafico.src
+
+        vista.campo_y_min.value = "-5"
+        vista.campo_y_max.value = "5"
+        controlador.aplicar_escala()
+
+        assert vista.grafico.src != sin_zoom
+
+    def test_un_solo_extremo_avisa(self, entorno):
+        """Medio limite no define una ventana; se pregunta en vez de adivinar."""
+        vista, controlador, _ = entorno
+        controlador.cargar_plantilla("Long Call")
+
+        vista.campo_y_min.value = "-100"
+        vista.campo_y_max.value = ""
+        controlador.aplicar_escala()
+
+        assert "los dos extremos" in vista.mensaje.value.lower()
+
+    def test_invertido_avisa(self, entorno):
+        vista, controlador, _ = entorno
+        controlador.cargar_plantilla("Long Call")
+
+        vista.campo_y_min.value = "100"
+        vista.campo_y_max.value = "-100"
+        controlador.aplicar_escala()
+
+        assert "eje y" in vista.mensaje.value.lower()
+
+    def test_los_dos_ejes_son_independientes(self, entorno):
+        """Se puede acotar el Y sin tocar el X y al reves."""
+        vista, controlador, _ = entorno
+        controlador.cargar_plantilla("Iron Condor")
+
+        vista.escala_automatica.value = False
+        vista.campo_x_min.value = "900"
+        vista.campo_x_max.value = "1100"
+        vista.campo_y_min.value = "-10"
+        vista.campo_y_max.value = "25"
+        controlador.aplicar_escala()
+
+        assert vista.mensaje.value == ""
+        assert vista.campo_x_min.value == "900.00"
+        assert vista.campo_y_min.value == "-10"
