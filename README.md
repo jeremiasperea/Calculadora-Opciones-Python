@@ -22,6 +22,25 @@ vencimiento y analizá el riesgo antes de operar.
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+```
+
+## Ejecución
+
+**Interfaz nueva (Flet, en el navegador):**
+
+```bash
+python -m ui.main
+```
+
+Se abre una ventana de escritorio. Para usarla desde el navegador:
+
+```bash
+python -c "import flet as ft; from ui.main import main; ft.run(main, view=ft.AppView.WEB_BROWSER)"
+```
+
+**Interfaz vieja (Tkinter):**
+
+```bash
 python main.py
 ```
 
@@ -50,7 +69,7 @@ El plan completo, las decisiones de diseño y el porqué de cada paso están en
 | 2 · Puertos | ✅ |
 | 3 · Casos de uso | ✅ |
 | 4 · Adaptadores | ✅ |
-| 5 · Interfaz Flet | ⬜ |
+| 5 · Interfaz Flet | 🔨 en curso |
 | 6 · Limpieza | ⬜ |
 | 7 · Persistencia SQLite | ⬜ |
 | 8 · API FastAPI (opcional) | ⬜ |
