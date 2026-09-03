@@ -22,6 +22,7 @@ from models import (
     approximate_breakevens,
     probability_metrics,
 )
+from strategies import TEMPLATES
 
 
 class TestBSMAnalytical:
@@ -58,7 +59,7 @@ class TestStrategyPayoff:
     """
 
     def test_bull_call_spread_below_first_strike(self):
-        # Spot < 1000: ambas opciones expiران fuera del dinero
+        # Spot < 1000: ambas opciones expiran fuera del dinero
         legs = [
             Leg("CALL", "COMPRA", 1, 1000, 0),  # Compra call strike 1000
             Leg("CALL", "VENTA", 1, 1100, 0),   # Venta call strike 1100
@@ -169,14 +170,17 @@ class TestProbabilityMetrics:
             legs=legs,
             multiplier=1,
         )
-        # Verificamos que los valores existen y son razonables
-        assert isinstance(pm["prob_profit"], (float, np.floating))
-        assert isinstance(pm["expected_pnl"], (float, np.floating))
-        # Prob profit debe estar entre 0 y 1
-        assert 0 <= pm["prob_profit"] <= 1
-        # Para un long call OTM con prima de 30, expected_pnl suele ser negativo
-        # (la mayoría de las veces expira fuera del dinero)
-        # Pero no es un requisito del modelo, solo del mercado
+        # GOLDEN MASTER: valores exactos del codigo actual.
+        # Un assert de rango (0 <= prob <= 1) no sirve como red de seguridad:
+        # seguiria pasando aunque la migracion cambiara el resultado por completo.
+        assert pm["prob_profit"] == pytest.approx(0.21880040547071175, rel=1e-9)
+        assert pm["expected_pnl"] == pytest.approx(-7.84051731744115, rel=1e-9)
+
+        # Sanidad economica: un call OTM (strike 1050 sobre spot 1000) a 30 dias
+        # expira sin valor la mayoria de las veces, asi que el P&L esperado bajo
+        # la medida de riesgo neutral es negativo por el costo de la prima.
+        assert pm["prob_profit"] < 0.5
+        assert pm["expected_pnl"] < 0
 
 
 class TestStrategyPayoffWithPremium:
@@ -196,3 +200,118 @@ class TestStrategyPayoffWithPremium:
         # Prima pagada: 30
         # P&L neto: 30 - 30 = 0
         assert payoff[0] == pytest.approx(0.0)
+
+
+class TestPipelineCompletoGoldenMaster:
+    """Test 6: EL TEST MAS IMPORTANTE DE LA FASE 0.
+
+    Por que: los tests anteriores prueban funciones AISLADAS. Este prueba la
+    CADENA COMPLETA, replicando exactamente lo que hace app.calculate():
+
+        prices -> payoff -> greeks -> initial -> breakevens -> probabilidades
+
+    En las fases 3-5 esa orquestacion se muda de app.calculate() a un caso de
+    uso. Podes tener las 5 funciones correctas y el pipeline roto (un signo
+    invertido al agregar, un multiplicador aplicado dos veces, un orden de
+    argumentos cambiado). Solo un test end-to-end detecta eso.
+
+    Estrategia: Iron Condor (4 patas, la mas compleja del set) con los
+    parametros por defecto de la app.
+
+    Los valores no son magicos - se verifican a mano:
+      credito neto  = -10 +20 +20 -10           = +20
+      perdida max   = ancho del spread - credito = 50 - 20 = 30
+      breakeven inf = strike put vendido - credito = 950 - 20 = 930
+      breakeven sup = strike call vendido + credito = 1050 + 20 = 1070
+    """
+
+    def _pipeline(self):
+        """Replica exacta de app.calculate() (app.py:61-68)."""
+        S, iv, r, q, days, mult = 1000.0, 0.35, 0.05, 0.0, 30.0, 1.0
+        legs = TEMPLATES["Iron Condor"]
+
+        prices = np.linspace(S * 0.5, S * 1.5, 401)
+        pnl = strategy_payoff(prices, legs, mult)
+        g = strategy_greeks(S, days, iv, r, q, legs, mult)
+        initial = sum(
+            (-1 if x.side == "COMPRA" else 1) * x.quantity * x.premium * mult
+            for x in legs
+        )
+        be = approximate_breakevens(prices, pnl)
+        pm = probability_metrics(S, days, iv, r, q, legs, mult)
+        return prices, pnl, g, initial, be, pm
+
+    def test_iron_condor_pnl_estructura(self):
+        _, pnl, _, initial, _, _ = self._pipeline()
+        assert initial == pytest.approx(20.0)       # credito neto recibido
+        assert pnl.max() == pytest.approx(20.0)     # ganancia max = el credito
+        assert pnl.min() == pytest.approx(-30.0)    # perdida max = 50 - 20
+        # Las alas: perdida maxima en ambos extremos, ganancia maxima en el centro
+        assert pnl[0] == pytest.approx(-30.0)
+        assert pnl[200] == pytest.approx(20.0)
+        assert pnl[-1] == pytest.approx(-30.0)
+
+    def test_iron_condor_breakevens(self):
+        _, _, _, _, be, _ = self._pipeline()
+        assert len(be) == 2
+        assert be[0] == pytest.approx(930.0, abs=0.01)
+        assert be[1] == pytest.approx(1070.0, abs=0.01)
+
+    def test_iron_condor_greeks(self):
+        _, _, g, _, _, _ = self._pipeline()
+        # Valores exactos (golden master)
+        assert g["delta"] == pytest.approx(-0.004556719861883218, rel=1e-9)
+        assert g["gamma"] == pytest.approx(-0.002170497346895761, rel=1e-9)
+        assert g["vega"] == pytest.approx(-0.6243896477371369, rel=1e-9)
+        assert g["theta"] == pytest.approx(0.3617228600607449, rel=1e-9)
+        assert g["rho"] == pytest.approx(0.015026606715508983, rel=1e-9)
+
+        # Sanidad economica: un iron condor es una posicion corta en volatilidad
+        assert abs(g["delta"]) < 0.05    # direccionalmente neutral
+        assert g["gamma"] < 0            # pierde si el subyacente se mueve
+        assert g["vega"] < 0             # pierde si sube la volatilidad
+        assert g["theta"] > 0            # gana con el paso del tiempo
+
+    def test_iron_condor_probabilidades(self):
+        _, _, _, _, _, pm = self._pipeline()
+        assert pm["prob_profit"] == pytest.approx(0.515239261105258, rel=1e-9)
+        assert pm["expected_pnl"] == pytest.approx(-2.9331256909927075, rel=1e-9)
+
+
+class TestMultiplicador:
+    """Test 7: el multiplicador se aplica UNA SOLA VEZ.
+
+    Por que existe este test: fue descubierto con una prueba de mutacion.
+    Se introdujo a proposito el bug `payoff * multiplier * multiplier` y
+    NINGUNO de los otros 14 tests fallo, porque todos usaban multiplier=1
+    (y 1*1 = 1, el bug es invisible).
+
+    Ese bug es exactamente el que se cuela en una migracion a capas: el
+    multiplicador se aplica en la entidad Strategy Y otra vez en el caso de
+    uso. Con multiplier=100 (contratos de indice) el P&L sale 100 veces mas
+    grande y el operador toma una decision con un numero absurdo.
+
+    Regla general: si un parametro tiene un valor neutro (1 para multiplicar,
+    0 para sumar), NUNCA lo testees solo con ese valor.
+    """
+
+    def test_multiplicador_escala_linealmente(self):
+        legs = [Leg("CALL", "COMPRA", 1, 1000, 40)]
+        spots = np.array([1100.0])
+
+        base = strategy_payoff(spots, legs, multiplier=1.0)[0]
+        x100 = strategy_payoff(spots, legs, multiplier=100.0)[0]
+
+        # intrinsic 100 - prima 40 = 60 por unidad
+        assert base == pytest.approx(60.0)
+        # Escala LINEAL, no cuadratica: 60 * 100 = 6000 (no 600000)
+        assert x100 == pytest.approx(6000.0)
+        assert x100 == pytest.approx(base * 100.0)
+
+    def test_multiplicador_escala_greeks_linealmente(self):
+        legs = [Leg("CALL", "COMPRA", 1, 1000, 40)]
+        g1 = strategy_greeks(1000, 30, 0.35, 0.05, 0, legs, multiplier=1)
+        g100 = strategy_greeks(1000, 30, 0.35, 0.05, 0, legs, multiplier=100)
+
+        for greek in ("delta", "gamma", "vega", "theta", "rho"):
+            assert g100[greek] == pytest.approx(g1[greek] * 100.0, rel=1e-9), greek
