@@ -3,24 +3,17 @@
 from io import BytesIO
 from pathlib import Path
 
-import matplotlib
-
-# Backend sin ventana: el PDF se genera en memoria, no hay pantalla que usar.
-# Hay que fijarlo antes de importar pyplot o matplotlib elige uno interactivo
-# y falla en un servidor o al exportar desde un proceso sin display.
-matplotlib.use("Agg")
-
-import matplotlib.pyplot as plt  # noqa: E402
-from reportlab.lib import colors  # noqa: E402
-from reportlab.lib.pagesizes import A4  # noqa: E402
-from reportlab.lib.styles import getSampleStyleSheet  # noqa: E402
-from reportlab.lib.units import cm  # noqa: E402
-from reportlab.platypus import (  # noqa: E402
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import cm
+from reportlab.platypus import (
     Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
 )
 
-from application.dtos.snapshot import SimulationSnapshot  # noqa: E402
-from application.ports.exporter_port import ExporterPort  # noqa: E402
+from application.dtos.snapshot import SimulationSnapshot
+from application.ports.exporter_port import ExporterPort
+from infrastructure.charts.payoff_chart import render_payoff_png
 
 
 class PdfExporter(ExporterPort):
@@ -31,8 +24,9 @@ class PdfExporter(ExporterPort):
     util — un operador entiende la forma de un iron condor de un vistazo mucho
     antes que leyendo que la ganancia maxima es 20 y la perdida 30.
 
-    El grafico se genera con matplotlib a PNG en memoria y se embebe. No queda
-    ningun archivo temporal en disco.
+    El grafico lo dibuja infrastructure/charts/payoff_chart.py, el mismo modulo
+    que usa la pantalla. Compartirlo evita que el reporte impreso y lo que ve el
+    operador se vayan separando con cada retoque.
     """
 
     @property
@@ -57,7 +51,7 @@ class PdfExporter(ExporterPort):
         contenido = [
             Paragraph("Analisis de estrategia de opciones", estilos["Title"]),
             Spacer(1, 0.4 * cm),
-            Image(self._grafico(snapshot), width=16 * cm, height=9 * cm),
+            Image(BytesIO(render_payoff_png(snapshot)), width=16 * cm, height=9 * cm),
             Spacer(1, 0.5 * cm),
             Paragraph("Posicion", estilos["Heading2"]),
             self._tabla_patas(snapshot),
@@ -66,43 +60,6 @@ class PdfExporter(ExporterPort):
             self._tabla_resumen(snapshot),
         ]
         doc.build(contenido)
-
-    def _grafico(self, snapshot: SimulationSnapshot) -> BytesIO:
-        """Dibuja el perfil de P&L y lo devuelve como PNG en memoria."""
-        resultado = snapshot.result
-        figura, ejes = plt.subplots(figsize=(8, 4.5))
-        try:
-            precios, pnl = resultado.prices, resultado.pnl
-
-            # Verde donde gana, rojo donde pierde: se lee antes que los numeros.
-            ejes.fill_between(precios, pnl, 0, where=(pnl >= 0),
-                              color="#2e7d32", alpha=0.18, interpolate=True)
-            ejes.fill_between(precios, pnl, 0, where=(pnl < 0),
-                              color="#c62828", alpha=0.18, interpolate=True)
-            ejes.plot(precios, pnl, color="#1565c0", linewidth=1.8)
-
-            ejes.axhline(0, color="#555555", linewidth=0.8)
-            ejes.axvline(snapshot.market.spot, color="#555555",
-                         linestyle="--", linewidth=0.8)
-
-            for be in resultado.breakevens:
-                ejes.axvline(be, color="#ef6c00", linestyle=":", linewidth=1.0)
-
-            ejes.set_xlabel("Precio del subyacente al vencimiento")
-            ejes.set_ylabel("P&L")
-            ejes.set_title("Perfil de resultado al vencimiento")
-            ejes.grid(alpha=0.25)
-            figura.tight_layout()
-
-            buffer = BytesIO()
-            figura.savefig(buffer, format="png", dpi=150)
-            buffer.seek(0)
-            return buffer
-        finally:
-            # Cerrar siempre, incluso si algo falla al dibujar. Cada figura que
-            # queda abierta se acumula en memoria; en una app que exporta
-            # muchas veces eso es una fuga.
-            plt.close(figura)
 
     def _tabla_patas(self, snapshot: SimulationSnapshot) -> Table:
         filas = [["Tipo", "Lado", "Cantidad", "Strike", "Prima"]]
