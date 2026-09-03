@@ -83,6 +83,32 @@ class MainView:
         self.boton_exportar = ft.OutlinedButton(
             "Exportar", icon=ft.Icons.DOWNLOAD, width=150,
         )
+        self.boton_guardar = ft.OutlinedButton(
+            "Guardar", icon=ft.Icons.BOOKMARK_ADD_OUTLINED, width=150,
+        )
+        self.boton_biblioteca = ft.OutlinedButton(
+            "Mis simulaciones", icon=ft.Icons.FOLDER_OPEN, width=180,
+        )
+
+        # Dialogo para ponerle nombre a lo que se guarda
+        self.campo_nombre = ft.TextField(
+            label="Nombre de la simulacion", autofocus=True, width=340,
+        )
+        self.dialogo_guardar = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Guardar simulacion"),
+            content=self.campo_nombre,
+        )
+
+        # Dialogo con la lista de lo guardado
+        self.lista_simulaciones = ft.Column(
+            [], spacing=4, scroll=ft.ScrollMode.AUTO, height=320, width=520,
+        )
+        self.dialogo_biblioteca = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Mis simulaciones"),
+            content=self.lista_simulaciones,
+        )
         self.grafico = ft.Image(
             src=PNG_VACIO, fit=ft.BoxFit.CONTAIN, expand=True,
         )
@@ -146,6 +172,7 @@ class MainView:
                 self._seccion("Mercado", self._grilla_mercado()),
                 self._seccion("Estrategia", self._grilla_patas()),
                 ft.Row([self.boton_calcular, self.boton_exportar], spacing=8),
+                ft.Row([self.boton_guardar, self.boton_biblioteca], spacing=8),
                 self.mensaje,
                 self._seccion("Resultado", self._panel_metricas()),
             ], spacing=14, scroll=ft.ScrollMode.AUTO),
@@ -264,3 +291,63 @@ class MainView:
                 fila["quantity"].value = "0"
                 fila["strike"].value = "1000"
                 fila["premium"].value = "0"
+
+    def set_simulaciones(
+        self,
+        resumenes: list,
+        al_abrir,
+        al_borrar,
+    ) -> None:
+        """Llena la lista de simulaciones guardadas.
+
+        Recibe los callbacks en lugar de conocer al controlador: la vista no
+        sabe que pasa al abrir o al borrar, solo que hay algo que llamar. Eso
+        la mantiene como humble object aunque tenga botones que hacen cosas.
+        """
+        if not resumenes:
+            self.lista_simulaciones.controls = [
+                ft.Text("Todavia no guardaste ninguna simulacion.",
+                        italic=True, size=13)
+            ]
+            return
+
+        filas = []
+        for r in resumenes:
+            filas.append(
+                ft.Container(
+                    content=ft.Row([
+                        ft.Column([
+                            ft.Text(r.name, weight=ft.FontWeight.W_500, size=14),
+                            ft.Text(
+                                f"{r.created_at:%d/%m/%Y %H:%M} · {r.description} · "
+                                f"P&L inicial {r.net_premium:,.2f}",
+                                size=11, color=ft.Colors.GREY_700,
+                            ),
+                        ], spacing=1, expand=True),
+                        ft.IconButton(
+                            ft.Icons.FOLDER_OPEN, tooltip="Abrir",
+                            on_click=lambda _, i=r.id: al_abrir(i),
+                        ),
+                        ft.IconButton(
+                            ft.Icons.DELETE_OUTLINE, tooltip="Borrar",
+                            icon_color=ft.Colors.RED_400,
+                            on_click=lambda _, i=r.id: al_borrar(i),
+                        ),
+                    ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    padding=ft.Padding(left=10, right=6, top=6, bottom=6),
+                    border=ft.border.all(1, ft.Colors.GREY_300),
+                    border_radius=6,
+                )
+            )
+        self.lista_simulaciones.controls = filas
+
+    def set_mercado(self, spot, volatilidad_pct, tasa_pct, dividendo_pct,
+                    dias, multiplicador) -> None:
+        """Escribe las condiciones de mercado. La usa abrir una simulacion."""
+        valores = {
+            "spot": spot, "volatility_pct": volatilidad_pct,
+            "rate_pct": tasa_pct, "dividend_pct": dividendo_pct,
+            "days": dias, "multiplier": multiplicador,
+        }
+        for clave, valor in valores.items():
+            self.campos_mercado[clave].value = f"{valor:g}"

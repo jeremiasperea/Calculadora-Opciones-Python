@@ -9,6 +9,7 @@ from application.dtos.snapshot import SimulationSnapshot
 from application.use_cases.calculate_strategy import CalculateStrategyUseCase
 from application.use_cases.export_strategy import ExportStrategyUseCase
 from application.use_cases.load_template import LoadTemplateUseCase
+from application.use_cases.simulation_library import SimulationLibraryUseCase
 from infrastructure.charts.payoff_chart import render_payoff_png
 from ui.mappers.form_mapper import (
     FormError, LegForm, MarketForm, to_market, to_strategy,
@@ -38,12 +39,14 @@ class AppController:
         calcular: CalculateStrategyUseCase,
         cargar_plantilla: LoadTemplateUseCase,
         exportar: ExportStrategyUseCase,
+        biblioteca: SimulationLibraryUseCase,
         refrescar: Callable[[], None],
     ) -> None:
         self._view = view
         self._calcular = calcular
         self._cargar_plantilla = cargar_plantilla
         self._exportar = exportar
+        self._biblioteca = biblioteca
         self._refrescar = refrescar
 
         # Ultimo calculo, para poder exportar sin recalcular
@@ -193,4 +196,70 @@ class AppController:
 
     def _error(self, mensaje: str) -> None:
         self._view.set_mensaje(mensaje, es_error=True)
+        self._refrescar()
+
+    # ---- simulaciones guardadas -----------------------------------------
+
+    def guardar_simulacion(self, nombre: str) -> bool:
+        """Guarda el ultimo calculo con el nombre que puso el operador.
+
+        Devuelve si pudo, para que la pantalla sepa si cerrar el dialogo o
+        dejarlo abierto con el mensaje de error a la vista.
+        """
+        if self._ultimo is None:
+            self._error("Calcule antes de guardar.")
+            return False
+        try:
+            self._biblioteca.save(nombre, self._ultimo)
+        except ValueError as e:
+            self._error(str(e))
+            return False
+
+        self._view.set_mensaje(f"Guardado como «{nombre.strip()}»", es_error=False)
+        self._refrescar()
+        return True
+
+    def listar_simulaciones(self) -> list:
+        return self._biblioteca.list_all()
+
+    def abrir_simulacion(self, sim_id: str) -> None:
+        """Carga una simulacion guardada en el formulario y recalcula.
+
+        Se escriben los datos y se vuelve a calcular en lugar de mostrar el
+        resultado guardado. Asi lo que se ve en pantalla siempre corresponde a
+        lo que dice el formulario, y el operador puede modificar un parametro
+        y ver el efecto sin que queden numeros viejos mezclados.
+        """
+        try:
+            guardada = self._biblioteca.load(sim_id)
+        except KeyError:
+            self._error("Esa simulacion ya no existe.")
+            return
+
+        estrategia = guardada.snapshot.strategy
+        mercado = guardada.snapshot.market
+
+        self._view.set_mercado(
+            spot=mercado.spot,
+            volatilidad_pct=mercado.volatility * 100,
+            tasa_pct=mercado.rate * 100,
+            dividendo_pct=mercado.dividend_yield * 100,
+            dias=mercado.days_to_expiry,
+            multiplicador=estrategia.multiplier,
+        )
+        self._view.set_patas([
+            (leg.option_type.value, leg.side.value,
+             f"{leg.quantity:g}", f"{leg.strike:g}", f"{leg.premium:g}")
+            for leg in estrategia.legs
+        ])
+        self.calcular()
+        self._view.set_mensaje(f"Abierta «{guardada.name}»", es_error=False)
+        self._refrescar()
+
+    def borrar_simulacion(self, sim_id: str) -> None:
+        try:
+            self._biblioteca.delete(sim_id)
+        except KeyError:
+            self._error("Esa simulacion ya no existe.")
+            return
         self._refrescar()

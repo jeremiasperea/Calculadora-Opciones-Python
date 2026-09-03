@@ -46,3 +46,7 @@ dmypy.json
 # Environment variables
 .env
 .env.local
+
+# Base de datos local de simulaciones
+*.db
+*.db-journal

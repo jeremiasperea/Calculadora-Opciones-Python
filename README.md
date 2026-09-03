@@ -9,6 +9,7 @@ vencimiento y analizá el riesgo antes de operar.
 - 11 plantillas: Long Call, Bull Call Spread, Iron Condor, Straddle, Butterfly,
   Backspreads y más
 - Exportación a CSV, Excel, JSON (reimportable) y PDF con gráfico
+- Guardado de simulaciones para retomarlas después
 
 > **Herramienta educativa.** No usa datos de mercado en vivo y asume
 > volatilidad constante, precios lognormales y ejercicio sólo al vencimiento.
@@ -52,7 +53,7 @@ domain/          entidades y reglas de negocio, sin dependencias externas
 application/     casos de uso y puertos (interfaces)
 infrastructure/  Black-Scholes, exportadores, catálogo de plantillas
 ui/              interfaz Flet
-tests/           421 tests
+tests/           474 tests
 ```
 
 Arquitectura hexagonal: las dependencias apuntan hacia adentro. El dominio no
@@ -70,5 +71,5 @@ El plan completo y el porqué de cada decisión están en
 | 4 · Adaptadores | ✅ |
 | 5 · Interfaz Flet | ✅ |
 | 6 · Limpieza | ✅ |
-| 7 · Persistencia SQLite | ⬜ |
+| 7 · Persistencia SQLite | ✅ |
 | 8 · API FastAPI (opcional) | ⬜ |

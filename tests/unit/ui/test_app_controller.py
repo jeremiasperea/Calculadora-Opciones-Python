@@ -16,9 +16,11 @@ import pytest
 from application.use_cases.calculate_strategy import CalculateStrategyUseCase
 from application.use_cases.export_strategy import ExportStrategyUseCase
 from application.use_cases.load_template import LoadTemplateUseCase
+from application.use_cases.simulation_library import SimulationLibraryUseCase
 from infrastructure.adapters.bsm_pricing import BSMPricingEngine
 from infrastructure.adapters.csv_exporter import CsvExporter
 from infrastructure.adapters.json_exporter import JsonExporter
+from infrastructure.adapters.sqlite_persistence import SqlitePersistence
 from infrastructure.repositories.template_repository import InMemoryTemplateRepository
 from ui.controllers.app_controller import AppController
 from ui.views.main_view import MainView
@@ -35,7 +37,13 @@ class Refresco:
 
 
 @pytest.fixture
-def entorno():
+def entorno(tmp_path):
+    """Cada test recibe una base vacia propia.
+
+    Sin tmp_path los tests compartirian la base real de la aplicacion: se
+    ensuciaria con datos de prueba y el orden de ejecucion cambiaria los
+    resultados.
+    """
     vista = MainView()
     refresco = Refresco()
     controlador = AppController(
@@ -43,6 +51,7 @@ def entorno():
         calcular=CalculateStrategyUseCase(BSMPricingEngine()),
         cargar_plantilla=LoadTemplateUseCase(InMemoryTemplateRepository()),
         exportar=ExportStrategyUseCase([CsvExporter(), JsonExporter()]),
+        biblioteca=SimulationLibraryUseCase(SqlitePersistence(tmp_path / "test.db")),
         refrescar=refresco,
     )
     return vista, controlador, refresco
@@ -192,20 +201,22 @@ class TestCompositionRoot:
     necesita una ventana de verdad —eventos, layout— queda fuera de los tests.
     """
 
-    def test_arma_el_controlador_completo(self):
+    def test_arma_el_controlador_completo(self, tmp_path):
         from ui.main import build_controller
 
         vista = MainView()
-        controlador = build_controller(vista, lambda: None)
+        controlador = build_controller(vista, lambda: None, tmp_path / "t.db")
         controlador.inicializar()
 
         assert len(vista.selector_plantilla.options) == 11
         assert vista.metricas["Delta"].value != "—"
 
-    def test_ofrece_los_cuatro_formatos(self):
+    def test_ofrece_los_cuatro_formatos(self, tmp_path):
         from ui.main import build_controller
 
-        formatos = build_controller(MainView(), lambda: None).formatos_de_exportacion()
+        formatos = build_controller(
+            MainView(), lambda: None, tmp_path / "t.db"
+        ).formatos_de_exportacion()
         assert [e for e, _ in formatos] == [".csv", ".xlsx", ".json", ".pdf"]
 
     def test_calcula_el_iron_condor_de_punta_a_punta(self, tmp_path):
@@ -213,7 +224,7 @@ class TestCompositionRoot:
         from ui.main import build_controller
 
         vista = MainView()
-        controlador = build_controller(vista, lambda: None)
+        controlador = build_controller(vista, lambda: None, tmp_path / "t.db")
         controlador.inicializar()
         controlador.cargar_plantilla("Iron Condor")
 
@@ -222,3 +233,90 @@ class TestCompositionRoot:
         destino = tmp_path / "condor.pdf"
         controlador.exportar(destino)
         assert destino.read_bytes()[:5] == b"%PDF-"
+
+
+class TestSimulacionesGuardadas:
+    def test_guardar_sin_calcular_avisa(self, entorno):
+        vista, controlador, _ = entorno
+        assert controlador.guardar_simulacion("Prueba") is False
+        assert "calcule antes" in vista.mensaje.value.lower()
+
+    def test_guardar_sin_nombre_avisa(self, entorno):
+        vista, controlador, _ = entorno
+        controlador.cargar_plantilla("Long Call")
+        assert controlador.guardar_simulacion("   ") is False
+        assert "nombre" in vista.mensaje.value.lower()
+
+    def test_guarda_y_aparece_en_la_lista(self, entorno):
+        vista, controlador, _ = entorno
+        controlador.cargar_plantilla("Iron Condor")
+
+        assert controlador.guardar_simulacion("Condor de marzo") is True
+        assert "guardado" in vista.mensaje.value.lower()
+
+        lista = controlador.listar_simulaciones()
+        assert len(lista) == 1
+        assert lista[0].name == "Condor de marzo"
+        assert lista[0].net_premium == pytest.approx(20.0)
+
+    def test_abrir_restaura_el_formulario(self, entorno):
+        """Guardar con unos parametros, cambiarlos, abrir y ver que vuelven."""
+        vista, controlador, _ = entorno
+        controlador.cargar_plantilla("Iron Condor")
+        vista.campos_mercado["volatility_pct"].value = "42"
+        controlador.calcular()
+        controlador.guardar_simulacion("Con volatilidad 42")
+
+        # Se cambia todo
+        controlador.cargar_plantilla("Long Call")
+        vista.campos_mercado["volatility_pct"].value = "20"
+        controlador.calcular()
+
+        # Y se abre la guardada
+        sim_id = controlador.listar_simulaciones()[0].id
+        controlador.abrir_simulacion(sim_id)
+
+        assert vista.campos_mercado["volatility_pct"].value == "42"
+        assert vista.filas_patas[0]["strike"].value == "900"
+        assert len([f for f in vista.filas_patas if f["quantity"].value != "0"]) == 4
+
+    def test_abrir_recalcula(self, entorno):
+        vista, controlador, _ = entorno
+        controlador.cargar_plantilla("Iron Condor")
+        controlador.guardar_simulacion("Condor")
+
+        sim_id = controlador.listar_simulaciones()[0].id
+        controlador.abrir_simulacion(sim_id)
+
+        assert vista.metricas["P&L inicial"].value == "20.00"
+        assert "abierta" in vista.mensaje.value.lower()
+
+    def test_borrar_la_saca_de_la_lista(self, entorno):
+        _, controlador, _ = entorno
+        controlador.cargar_plantilla("Long Call")
+        controlador.guardar_simulacion("Descartable")
+
+        sim_id = controlador.listar_simulaciones()[0].id
+        controlador.borrar_simulacion(sim_id)
+
+        assert controlador.listar_simulaciones() == []
+
+    def test_abrir_algo_borrado_avisa(self, entorno):
+        vista, controlador, _ = entorno
+        controlador.cargar_plantilla("Long Call")
+        controlador.guardar_simulacion("Efimera")
+        sim_id = controlador.listar_simulaciones()[0].id
+        controlador.borrar_simulacion(sim_id)
+
+        controlador.abrir_simulacion(sim_id)
+        assert "ya no existe" in vista.mensaje.value.lower()
+
+    def test_los_nombres_repetidos_conviven(self, entorno):
+        _, controlador, _ = entorno
+        controlador.cargar_plantilla("Long Call")
+        controlador.guardar_simulacion("Prueba")
+        controlador.guardar_simulacion("Prueba")
+
+        lista = controlador.listar_simulaciones()
+        assert len(lista) == 2
+        assert lista[0].id != lista[1].id

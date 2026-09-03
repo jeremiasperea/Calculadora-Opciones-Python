@@ -200,7 +200,7 @@ clases concretas de todas las capas y arma la inyección de dependencias.
 
 Eliminar `app.py`, `models.py`, `strategies.py`. Actualizar `README.md`.
 
-### Fase 7 — Persistencia
+### Fase 7 — Persistencia ✅ COMPLETA
 
 Guardar y recuperar simulaciones en SQLite.
 
