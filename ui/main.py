@@ -61,18 +61,23 @@ def main(page: ft.Page) -> None:
     controller = build_controller(view, page.update)
 
     # --- guardado de archivos ---
-    selector_archivo = ft.FilePicker(
-        on_result=lambda e: controller.exportar(Path(e.path)) if e.path else None
-    )
+    #
+    # En Flet 0.86 el selector de archivos ya no avisa por callback: save_file
+    # es una corrutina que devuelve directamente la ruta elegida, o None si el
+    # usuario cancelo. Por eso el manejador es async.
+    selector_archivo = ft.FilePicker()
     page.services.append(selector_archivo)
 
-    def abrir_dialogo_guardar(_):
+    async def abrir_dialogo_exportar(_):
         extensiones = [ext.lstrip(".") for ext, _ in controller.formatos_de_exportacion()]
-        selector_archivo.save_file(
+        ruta = await selector_archivo.save_file(
             dialog_title="Exportar simulacion",
             file_name="estrategia.pdf",
             allowed_extensions=extensiones,
         )
+        if ruta:
+            controller.exportar(Path(ruta))
+            page.update()
 
     # --- guardar una simulacion ---
     def abrir_dialogo_guardar(_):
@@ -120,7 +125,7 @@ def main(page: ft.Page) -> None:
     view.boton_calcular.on_click = lambda _: controller.calcular()
     view.boton_guardar.on_click = abrir_dialogo_guardar
     view.boton_biblioteca.on_click = abrir_biblioteca
-    view.boton_exportar.on_click = abrir_dialogo_guardar
+    view.boton_exportar.on_click = abrir_dialogo_exportar
     view.selector_plantilla.on_change = (
         lambda e: controller.cargar_plantilla(e.control.value)
     )

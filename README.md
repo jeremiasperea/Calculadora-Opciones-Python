@@ -72,7 +72,7 @@ application/     casos de uso y puertos (interfaces)
 infrastructure/  Black-Scholes, exportadores, persistencia, plantillas
 ui/              interfaz Flet (adaptador de entrada)
 api/             API REST con FastAPI (otro adaptador de entrada)
-tests/           505 tests
+tests/           518 tests
 ```
 
 Arquitectura hexagonal: las dependencias apuntan hacia adentro. El dominio no
