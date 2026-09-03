@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from domain.entities.greeks import Greeks
 from domain.entities.leg import Leg
 from domain.value_objects.market_conditions import MarketConditions
+from domain.value_objects.price_scenarios import PriceScenarios
 
 
 class PricingPort(ABC):
@@ -45,5 +46,23 @@ class PricingPort(ABC):
 
         Dividirlo asi mantiene al adaptador ocupado en lo unico que le
         compete — la matematica del modelo — sin saber nada de estrategias.
+        """
+        ...
+
+    @abstractmethod
+    def generate_scenarios(
+        self, market: MarketConditions, points: int = 20_001
+    ) -> PriceScenarios:
+        """Distribucion de precios posibles del subyacente al vencimiento.
+
+        Se agrega al mismo puerto que price_leg, y no a uno aparte, porque las
+        dos cosas salen del mismo supuesto: Black-Scholes vale precisamente
+        porque asume que el precio futuro es lognormal. Un adaptador que
+        valuara con un modelo de saltos tendria que generar escenarios con
+        saltos, o se estaria contradiciendo a si mismo. Separarlos permitiria
+        combinaciones incoherentes.
+
+        El dominio recibe los escenarios armados y solo integra sobre ellos
+        (domain/services/probability.py), sin saber de que distribucion salen.
         """
         ...

@@ -167,7 +167,7 @@ invariantes. Un `OptionType` sólo define qué valores son válidos.
 no `Protocol` a propósito: la herencia explícita hace *visible* dónde se
 invierte la dependencia.
 
-### Fase 3 — Casos de uso
+### Fase 3 — Casos de uso ✅ COMPLETA
 
 `application/use_cases/`, escritos contra los puertos, **antes de que exista
 ningún adaptador real**. Se prueban con *fakes* escritos a mano.

@@ -58,6 +58,20 @@ class TestPricingPort:
             def price_leg(self, leg, market):
                 return Greeks(delta=0.5)
 
+            def generate_scenarios(self, market, points=20_001):
+                import numpy as np
+                from domain.value_objects.price_scenarios import PriceScenarios
+
+                grid = np.linspace(0.0, 1.0, points)
+                return PriceScenarios(
+                    prices=np.full(points, market.spot),
+                    densities=np.ones(points),
+                    grid=grid,
+                )
+
+        # Agregar generate_scenarios al puerto rompio este doble al instante.
+        # Con typing.Protocol el error habria aparecido recien cuando algo
+        # llamara al metodo faltante — quiza en produccion.
         greeks = PricingFalso().price_leg(
             Leg("CALL", "COMPRA", 1, 1000, 40),
             MarketConditions(spot=1000, days_to_expiry=30, volatility=0.35),
