@@ -76,22 +76,16 @@ class TestCasosBorde:
         assert find_breakevens(precios, pnl) == pytest.approx([1000.0])
 
 
-class TestEquivalenciaConElCodigoViejo:
-    def test_iron_condor_mismos_breakevens(self):
-        """Golden master de la Fase 0: 930 y 1070."""
-        from models import approximate_breakevens
+class TestContraLosValoresDeReferencia:
+    def test_iron_condor(self, golden):
+        """Los dos breakevens de un condor: 930 y 1070."""
+        caso = golden["plantillas"]["Iron Condor|x1"]
 
         s = Strategy([
-            Leg("PUT", "COMPRA", 1, 900, 10),
-            Leg("PUT", "VENTA", 1, 950, 20),
-            Leg("CALL", "VENTA", 1, 1050, 20),
-            Leg("CALL", "COMPRA", 1, 1100, 10),
+            Leg(p["option_type"], p["side"], p["quantity"], p["strike"], p["premium"])
+            for p in caso["patas"]
         ])
         precios = np.linspace(500, 1500, 401)
-        pnl = s.payoff(precios)
 
-        obtenido = find_breakevens(precios, pnl)
-        esperado = approximate_breakevens(precios, pnl)
-
-        assert obtenido == pytest.approx(esperado)
-        assert obtenido == pytest.approx([930.0, 1070.0])
+        assert find_breakevens(precios, s.payoff(precios)) == pytest.approx(
+            caso["breakevens"], rel=1e-9)

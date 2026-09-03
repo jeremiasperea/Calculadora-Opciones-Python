@@ -119,36 +119,41 @@ class TestPropiedadesMatematicas:
         assert g.delta == pytest.approx(0.0, abs=0.01)
 
 
-class TestEquivalenciaConModelsPy:
-    """La migracion no movio ningun numero."""
+class TestContraLosValoresDeReferencia:
+    """Los griegos que producia el codigo original, en 18 combinaciones."""
 
     @pytest.mark.parametrize("tipo", ["CALL", "PUT"])
     @pytest.mark.parametrize("strike", [900, 1000, 1100])
     @pytest.mark.parametrize("dias", [7, 30, 365])
-    def test_griegos_identicos(self, tipo, strike, dias):
-        from models import greeks as greeks_viejo
-
+    def test_griegos(self, golden, tipo, strike, dias):
+        caso = golden["bsm_casos"][f"{tipo}|K{strike}|{dias}d"]
         m = MarketConditions(spot=1000, days_to_expiry=dias,
                              volatility=0.35, rate=0.05, dividend_yield=0.02)
-        esperado = greeks_viejo(1000, strike, dias, 0.35, 0.05, 0.02, tipo)
         obtenido = BSMPricingEngine().price_leg(Leg(tipo, "COMPRA", 1, strike, 0), m)
 
-        for nombre in ("value", "delta", "gamma", "vega", "theta", "rho"):
-            assert getattr(obtenido, nombre) == pytest.approx(
-                esperado[nombre], rel=1e-12
-            ), f"{nombre} para {tipo} K={strike} {dias}d"
+        for campo in ("value", "delta", "gamma", "vega", "theta", "rho"):
+            assert getattr(obtenido, campo) == pytest.approx(
+                caso[campo], rel=1e-9
+            ), f"{campo} para {tipo} K={strike} {dias}d"
 
-    def test_escenarios_identicos(self):
-        """La grilla de generate_scenarios reproduce la de probability_metrics."""
-        m = MarketConditions(spot=1000, days_to_expiry=30,
-                             volatility=0.35, rate=0.05)
+    def test_escenarios_lognormales(self, golden):
+        """La grilla reproduce la que generaba probability_metrics."""
+        params = golden["parametros"]
+        m = MarketConditions(spot=params["spot"],
+                             days_to_expiry=params["days_to_expiry"],
+                             volatility=params["volatility"],
+                             rate=params["rate"],
+                             dividend_yield=params["dividend_yield"])
         esc = BSMPricingEngine().generate_scenarios(m)
 
-        T = 30 / 365
+        T = params["days_to_expiry"] / 365
         z = np.linspace(-5, 5, 20001)
-        precios_esperados = 1000 * np.exp((0.05 - 0.0 - 0.5 * 0.35 ** 2) * T
-                                          + 0.35 * np.sqrt(T) * z)
-        np.testing.assert_allclose(esc.prices, precios_esperados, rtol=1e-12)
+        esperados = params["spot"] * np.exp(
+            (params["rate"] - params["dividend_yield"]
+             - 0.5 * params["volatility"] ** 2) * T
+            + params["volatility"] * np.sqrt(T) * z
+        )
+        np.testing.assert_allclose(esc.prices, esperados, rtol=1e-12)
         np.testing.assert_allclose(esc.grid, z, rtol=1e-12)
 
 

@@ -5,13 +5,9 @@ scipy>=1.13
 # Interfaz
 flet>=0.86
 
-# Graficos
+# Graficos (pantalla y reporte PDF)
 matplotlib>=3.9
 
 # Exportacion
 openpyxl>=3.1
 reportlab>=4.0
-
-# Solo lo usa app.py, la interfaz Tkinter vieja. Se elimina en la Fase 6:
-# los exportadores nuevos usan csv y json de la biblioteca estandar.
-pandas>=2.2

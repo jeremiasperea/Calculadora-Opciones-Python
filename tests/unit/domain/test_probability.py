@@ -103,36 +103,31 @@ class TestPriceScenarios:
             esc.prices = np.zeros(10)
 
 
-class TestEquivalenciaConElCodigoViejo:
-    def test_iron_condor_mismos_numeros(self):
-        """Golden master de la Fase 0: prob 0.515239..., esperado -2.933125...
-
-        Se reconstruye a mano la grilla que arma models.probability_metrics()
-        y se verifica que integrar por separado da identico.
-        """
-        from models import Leg as LegViejo, probability_metrics
+class TestContraLosValoresDeReferencia:
+    def test_iron_condor(self, golden):
+        """Integrar sobre los escenarios del adaptador da los mismos numeros."""
         from domain.entities.leg import Leg
         from domain.entities.strategy import Strategy
+        from domain.value_objects.market_conditions import MarketConditions
+        from infrastructure.adapters.bsm_pricing import BSMPricingEngine
 
-        S, days, sigma, r, q, mult = 1000.0, 30.0, 0.35, 0.05, 0.0, 1.0
-        crudas = [
-            ("PUT", "COMPRA", 1, 900, 10),
-            ("PUT", "VENTA", 1, 950, 20),
-            ("CALL", "VENTA", 1, 1050, 20),
-            ("CALL", "COMPRA", 1, 1100, 10),
-        ]
-        esperado = probability_metrics(S, days, sigma, r, q,
-                                       [LegViejo(*c) for c in crudas], mult)
+        caso = golden["plantillas"]["Iron Condor|x1"]
+        params = golden["parametros"]
 
-        # Misma grilla que genera el modelo lognormal en models.py
-        T = days / 365
-        z = np.linspace(-5, 5, 20001)
-        esc = PriceScenarios(
-            prices=S * np.exp((r - q - 0.5 * sigma ** 2) * T + sigma * np.sqrt(T) * z),
-            densities=np.exp(-0.5 * z * z) / np.sqrt(2 * np.pi),
-            grid=z,
+        estrategia = Strategy([
+            Leg(p["option_type"], p["side"], p["quantity"], p["strike"], p["premium"])
+            for p in caso["patas"]
+        ])
+        mercado = MarketConditions(
+            spot=params["spot"], days_to_expiry=params["days_to_expiry"],
+            volatility=params["volatility"], rate=params["rate"],
+            dividend_yield=params["dividend_yield"],
         )
-        pnl = Strategy([Leg(*c) for c in crudas], multiplier=mult).payoff(esc.prices)
 
-        assert profit_probability(pnl, esc) == pytest.approx(esperado["prob_profit"], rel=1e-12)
-        assert expected_pnl(pnl, esc) == pytest.approx(esperado["expected_pnl"], rel=1e-12)
+        escenarios = BSMPricingEngine().generate_scenarios(mercado)
+        pnl = estrategia.payoff(escenarios.prices)
+
+        assert profit_probability(pnl, escenarios) == pytest.approx(
+            caso["prob_profit"], rel=1e-9)
+        assert expected_pnl(pnl, escenarios) == pytest.approx(
+            caso["expected_pnl"], rel=1e-9)

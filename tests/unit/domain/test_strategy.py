@@ -118,21 +118,22 @@ class TestNetPremium:
         assert s.net_premium == pytest.approx(-4000.0)
 
 
-class TestEquivalenciaConElCodigoViejo:
-    """La prueba que de verdad importa: mismos numeros que models.py."""
+class TestContraLosValoresDeReferencia:
+    """Los numeros que producia el codigo original, ya sin el codigo original.
 
-    def test_iron_condor_payoff_identico(self):
-        from models import Leg as LegViejo, strategy_payoff
+    Durante la migracion este bloque importaba models.py y comparaba en vivo.
+    Al eliminarlo en la Fase 6 esa comparacion dejo de ser posible, asi que
+    los valores quedaron congelados en tests/golden_master.json.
+    """
 
-        viejas = [
-            LegViejo("PUT", "COMPRA", 1, 900, 10),
-            LegViejo("PUT", "VENTA", 1, 950, 20),
-            LegViejo("CALL", "VENTA", 1, 1050, 20),
-            LegViejo("CALL", "COMPRA", 1, 1100, 10),
-        ]
+    def test_iron_condor_forma_de_la_curva(self, golden):
+        caso = golden["plantillas"]["Iron Condor|x1"]
         precios = np.linspace(500, 1500, 401)
+        pnl = iron_condor().payoff(precios)
 
-        esperado = strategy_payoff(precios, viejas, 1.0)
-        obtenido = iron_condor().payoff(precios)
+        muestra = [float(pnl[i]) for i in range(0, 401, 50)]
+        assert muestra == pytest.approx(caso["curva_muestra"], rel=1e-9)
 
-        np.testing.assert_allclose(obtenido, esperado, rtol=1e-12)
+    def test_iron_condor_credito_neto(self, golden):
+        caso = golden["plantillas"]["Iron Condor|x1"]
+        assert iron_condor().net_premium == pytest.approx(caso["net_premium"])

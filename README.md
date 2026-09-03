@@ -8,7 +8,7 @@ vencimiento y analizá el riesgo antes de operar.
 - Puntos de equilibrio y probabilidad de beneficio
 - 11 plantillas: Long Call, Bull Call Spread, Iron Condor, Straddle, Butterfly,
   Backspreads y más
-- Exportación de escenarios a CSV y Excel
+- Exportación a CSV, Excel, JSON (reimportable) y PDF con gráfico
 
 > **Herramienta educativa.** No usa datos de mercado en vivo y asume
 > volatilidad constante, precios lognormales y ejercicio sólo al vencimiento.
@@ -26,22 +26,14 @@ pip install -r requirements.txt
 
 ## Ejecución
 
-**Interfaz nueva (Flet, en el navegador):**
-
 ```bash
 python -m ui.main
 ```
 
-Se abre una ventana de escritorio. Para usarla desde el navegador:
+Se abre como aplicación de escritorio. Para usarla en el navegador:
 
 ```bash
 python -c "import flet as ft; from ui.main import main; ft.run(main, view=ft.AppView.WEB_BROWSER)"
-```
-
-**Interfaz vieja (Tkinter):**
-
-```bash
-python main.py
 ```
 
 ## Tests
@@ -53,13 +45,20 @@ pytest -q
 
 ---
 
-## 🚧 Estado: en migración
+## Estructura
 
-El proyecto está migrando a **arquitectura hexagonal**, con interfaz **Flet**
-(navegador) y persistencia de simulaciones en **SQLite**. La versión Tkinter
-de arriba sigue siendo la funcional hasta que termine la Fase 5.
+```
+domain/          entidades y reglas de negocio, sin dependencias externas
+application/     casos de uso y puertos (interfaces)
+infrastructure/  Black-Scholes, exportadores, catálogo de plantillas
+ui/              interfaz Flet
+tests/           421 tests
+```
 
-El plan completo, las decisiones de diseño y el porqué de cada paso están en
+Arquitectura hexagonal: las dependencias apuntan hacia adentro. El dominio no
+importa nada; los casos de uso dependen de interfaces, no de implementaciones.
+
+El plan completo y el porqué de cada decisión están en
 **[ARQUITECTURA.md](ARQUITECTURA.md)**.
 
 | Fase | Estado |
@@ -69,7 +68,7 @@ El plan completo, las decisiones de diseño y el porqué de cada paso están en
 | 2 · Puertos | ✅ |
 | 3 · Casos de uso | ✅ |
 | 4 · Adaptadores | ✅ |
-| 5 · Interfaz Flet | 🔨 en curso |
-| 6 · Limpieza | ⬜ |
+| 5 · Interfaz Flet | ✅ |
+| 6 · Limpieza | ✅ |
 | 7 · Persistencia SQLite | ⬜ |
 | 8 · API FastAPI (opcional) | ⬜ |

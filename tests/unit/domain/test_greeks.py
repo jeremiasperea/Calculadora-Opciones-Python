@@ -131,34 +131,38 @@ class TestAgregacionEnStrategy:
             s.aggregate_greeks([Greeks(delta=0.6)])
 
 
-class TestEquivalenciaConElCodigoViejo:
-    def test_iron_condor_griegos_identicos(self):
-        """Se le pasan los griegos que calcula models.greeks() y se compara
-        el total contra models.strategy_greeks(). Si coinciden, la agregacion
-        migro sin cambiar nada.
-        """
-        from models import greeks as greeks_viejo, strategy_greeks
-        from models import Leg as LegViejo
+class TestContraLosValoresDeReferencia:
+    """La agregacion produce los griegos que producia el codigo original.
 
-        S, days, sigma, r, q, mult = 1000.0, 30.0, 0.35, 0.05, 0.0, 1.0
-        crudas = [
-            ("PUT", "COMPRA", 1, 900, 10),
-            ("PUT", "VENTA", 1, 950, 20),
-            ("CALL", "VENTA", 1, 1050, 20),
-            ("CALL", "COMPRA", 1, 1100, 10),
-        ]
+    Se alimenta con los griegos por pata que calcula el adaptador real y se
+    verifica el total. Es el unico test de este archivo que usa valores de
+    Black-Scholes de verdad; los demas usan numeros inventados a proposito,
+    para no atar la prueba de la suma al modelo de valuacion.
+    """
 
-        viejas = [LegViejo(*c) for c in crudas]
-        esperado = strategy_greeks(S, days, sigma, r, q, viejas, mult)
+    def test_iron_condor_griegos_agregados(self, golden):
+        from domain.value_objects.market_conditions import MarketConditions
+        from infrastructure.adapters.bsm_pricing import BSMPricingEngine
 
-        s = Strategy([Leg(*c) for c in crudas], multiplier=mult)
-        por_pata = [
-            Greeks(**greeks_viejo(S, k, days, sigma, r, q, t))
-            for t, _, _, k, _ in crudas
-        ]
-        obtenido = s.aggregate_greeks(por_pata)
+        caso = golden["plantillas"]["Iron Condor|x1"]
+        params = golden["parametros"]
 
-        for nombre in ("value", "delta", "gamma", "vega", "theta", "rho"):
-            assert getattr(obtenido, nombre) == pytest.approx(
-                esperado[nombre], rel=1e-12
-            ), nombre
+        estrategia = Strategy([
+            Leg(p["option_type"], p["side"], p["quantity"], p["strike"], p["premium"])
+            for p in caso["patas"]
+        ])
+        mercado = MarketConditions(
+            spot=params["spot"], days_to_expiry=params["days_to_expiry"],
+            volatility=params["volatility"], rate=params["rate"],
+            dividend_yield=params["dividend_yield"],
+        )
+
+        motor = BSMPricingEngine()
+        total = estrategia.aggregate_greeks(
+            [motor.price_leg(leg, mercado) for leg in estrategia.legs]
+        )
+
+        for campo in ("value", "delta", "gamma", "vega", "theta", "rho"):
+            assert getattr(total, campo) == pytest.approx(
+                caso["greeks"][campo], rel=1e-9
+            ), campo

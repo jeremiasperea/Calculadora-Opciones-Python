@@ -187,7 +187,7 @@ Los tests BSM de la Fase 0 se re-apuntan al adaptador nuevo: deben dar los
 **Concepto:** sustitución de Liskov. El adaptador real reemplaza al fake sin
 que el caso de uso note la diferencia.
 
-### Fase 5 — Interfaz Flet
+### Fase 5 — Interfaz Flet ✅ COMPLETA
 
 `ui/` con Flet, llamando directo a los casos de uso. Patrón *humble object*:
 la parte que toca Flet no toma decisiones de negocio, así que no necesita
@@ -196,7 +196,7 @@ tests automatizados.
 `main.py` pasa a ser el **composition root**: el único archivo que conoce
 clases concretas de todas las capas y arma la inyección de dependencias.
 
-### Fase 6 — Limpieza
+### Fase 6 — Limpieza ✅ COMPLETA
 
 Eliminar `app.py`, `models.py`, `strategies.py`. Actualizar `README.md`.
 

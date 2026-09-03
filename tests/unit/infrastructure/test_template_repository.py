@@ -46,19 +46,25 @@ class TestMultiplicador:
         assert s.net_premium == pytest.approx(2000.0)
 
 
-class TestEquivalenciaConStrategiesPy:
-    def test_mismas_plantillas_que_el_catalogo_viejo(self):
-        from strategies import TEMPLATES
+class TestContraElCatalogoOriginal:
+    """Las plantillas son las mismas que traia strategies.py."""
 
+    def test_estan_todas(self, golden):
+        esperadas = {clave.split("|")[0] for clave in golden["plantillas"]}
+        assert set(InMemoryTemplateRepository().list_names()) == esperadas
+
+    def test_las_patas_coinciden(self, golden):
         repo = InMemoryTemplateRepository()
-        assert set(repo.list_names()) == set(TEMPLATES)
+        for clave, caso in golden["plantillas"].items():
+            if not clave.endswith("|x1"):
+                continue
+            nombre = clave.split("|")[0]
+            patas = repo.get_template(nombre).legs
 
-        for nombre, patas_viejas in TEMPLATES.items():
-            nuevas = repo.get_template(nombre).legs
-            assert len(nuevas) == len(patas_viejas), nombre
-            for nueva, vieja in zip(nuevas, patas_viejas):
-                assert nueva.option_type == vieja.option_type
-                assert nueva.side == vieja.side
-                assert nueva.quantity == vieja.quantity
-                assert nueva.strike == vieja.strike
-                assert nueva.premium == vieja.premium
+            assert len(patas) == len(caso["patas"]), nombre
+            for pata, esperada in zip(patas, caso["patas"]):
+                assert pata.option_type.value == esperada["option_type"]
+                assert pata.side.value == esperada["side"]
+                assert pata.quantity == esperada["quantity"]
+                assert pata.strike == esperada["strike"]
+                assert pata.premium == esperada["premium"]
