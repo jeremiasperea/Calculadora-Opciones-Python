@@ -2,8 +2,12 @@
 numpy>=2.0
 scipy>=1.13
 
-# Interfaz
+# Interfaz de escritorio
 flet>=0.86
+
+# API REST (opcional: solo si se usa la API)
+fastapi>=0.115
+uvicorn[standard]>=0.30
 
 # Graficos (pantalla y reporte PDF)
 matplotlib>=3.9

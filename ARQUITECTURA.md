@@ -215,7 +215,7 @@ CREATE TABLE simulations (
 );
 ```
 
-### Fase 8 — API REST con FastAPI (opcional, posterior)
+### Fase 8 — API REST con FastAPI ✅ COMPLETA
 
 Exponer los mismos casos de uso por HTTP. **Es un adaptador de entrada más:
 no debería tocar ni una línea del dominio ni de los casos de uso.** Si hay que

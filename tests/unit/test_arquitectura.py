@@ -120,3 +120,30 @@ def test_la_aplicacion_no_importa_la_ui(archivo):
         f"{archivo.relative_to(RAIZ)} importa {sorted(importados)}. "
         "Las dependencias apuntan hacia adentro: ui -> application -> domain."
     )
+
+
+# --- Adaptadores de entrada ---------------------------------------------
+#
+# ui/ y api/ son las dos puertas de entrada del sistema. Pueden usar
+# infraestructura, porque son capas externas, pero solo desde su composition
+# root: el lugar donde se arma el grafo de dependencias.
+#
+# Si una ruta de la API o un controlador de la pantalla importaran un
+# adaptador concreto, estarian eligiendo la implementacion en vez de recibirla,
+# y los puertos dejarian de servir para algo.
+
+RUTAS_API = sorted((RAIZ / "api" / "routes").rglob("*.py")) if (RAIZ / "api").exists() else []
+
+
+@pytest.mark.parametrize("archivo", RUTAS_API, ids=lambda p: p.name)
+def test_las_rutas_de_la_api_no_eligen_implementaciones(archivo):
+    """Las rutas reciben casos de uso por inyeccion, no los construyen.
+
+    Solo api/dependencies.py, que es el composition root de esta capa, sabe
+    que el pricing es Black-Scholes y que la persistencia es SQLite.
+    """
+    importados = modulos_importados(archivo)
+    assert "infrastructure" not in importados, (
+        f"{archivo.relative_to(RAIZ)} importa infrastructure directamente. "
+        "Las rutas deben recibir los casos de uso por Depends(), no armarlos."
+    )
