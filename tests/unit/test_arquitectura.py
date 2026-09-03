@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-DOMINIO = Path(__file__).resolve().parents[3] / "domain"
+RAIZ = Path(__file__).resolve().parents[2]
 
 # numpy se permite a proposito: es una estructura de datos con operaciones
 # vectorizadas, no infraestructura. No hace I/O ni habla con nada externo.
@@ -52,7 +52,7 @@ def modulos_importados(archivo: Path) -> set[str]:
     return raices
 
 
-ARCHIVOS = sorted(DOMINIO.rglob("*.py"))
+ARCHIVOS = sorted((RAIZ / "domain").rglob("*.py"))
 
 
 @pytest.mark.parametrize("archivo", ARCHIVOS, ids=lambda p: p.name)
@@ -60,7 +60,7 @@ def test_no_importa_infraestructura(archivo):
     for modulo in modulos_importados(archivo):
         if modulo in PROHIBIDOS:
             pytest.fail(
-                f"{archivo.relative_to(DOMINIO.parent)} importa '{modulo}'.\n"
+                f"{archivo.relative_to(RAIZ)} importa '{modulo}'.\n"
                 f"Eso no es dominio: {PROHIBIDOS[modulo]}"
             )
 
@@ -73,7 +73,50 @@ def test_solo_importa_lo_permitido(archivo):
     """
     inesperados = modulos_importados(archivo) - PERMITIDOS
     assert not inesperados, (
-        f"{archivo.relative_to(DOMINIO.parent)} importa {sorted(inesperados)}, "
+        f"{archivo.relative_to(RAIZ)} importa {sorted(inesperados)}, "
         f"que no esta en la lista permitida {sorted(PERMITIDOS)}.\n"
         "Si de verdad corresponde al dominio, agregalo a PERMITIDOS con su motivo."
+    )
+
+
+# --- Capa de aplicacion -------------------------------------------------
+#
+# La regla cambia segun la capa. El dominio no puede importar NADA externo.
+# La aplicacion si puede importar el dominio (lo orquesta), pero sigue sin
+# poder tocar infraestructura: si un caso de uso importara scipy, el puerto
+# que se escribio para evitarlo no serviria de nada.
+
+APLICACION = RAIZ / "application"
+ARCHIVOS_APP = sorted(APLICACION.rglob("*.py")) if APLICACION.exists() else []
+
+
+@pytest.mark.parametrize("archivo", ARCHIVOS_APP, ids=lambda p: p.name)
+def test_la_aplicacion_no_importa_infraestructura(archivo):
+    """Los casos de uso y los puertos hablan con abstracciones.
+
+    Si un caso de uso importa scipy directamente, el PricingPort deja de
+    tener sentido: se puso justamente para que la aplicacion no sepa como se
+    valua una opcion.
+    """
+    for modulo in modulos_importados(archivo):
+        if modulo in PROHIBIDOS:
+            pytest.fail(
+                f"{archivo.relative_to(RAIZ)} importa '{modulo}'.\n"
+                f"La aplicacion depende de puertos, no de implementaciones: "
+                f"{PROHIBIDOS[modulo]}"
+            )
+
+
+@pytest.mark.parametrize("archivo", ARCHIVOS_APP, ids=lambda p: p.name)
+def test_la_aplicacion_no_importa_la_ui(archivo):
+    """Ni presentacion ni adaptadores.
+
+    La dependencia va hacia adentro: ui -> application -> domain. Un import
+    en sentido contrario convierte las capas en un adorno.
+    """
+    prohibidos_por_capa = {"ui", "presentation", "api", "app", "main"}
+    importados = modulos_importados(archivo) & prohibidos_por_capa
+    assert not importados, (
+        f"{archivo.relative_to(RAIZ)} importa {sorted(importados)}. "
+        "Las dependencias apuntan hacia adentro: ui -> application -> domain."
     )

@@ -157,7 +157,7 @@ invariantes. Un `OptionType` sólo define qué valores son válidos.
 
 **TDD real acá:** test primero, después la clase.
 
-### Fase 2 — Puertos
+### Fase 2 — Puertos ✅ COMPLETA
 
 `application/ports/` con `ABC`. Interfaces sin implementación.
 
