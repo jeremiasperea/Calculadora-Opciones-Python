@@ -5,6 +5,7 @@ from typing import Sequence
 
 import numpy as np
 
+from domain.entities.greeks import Greeks
 from domain.entities.leg import Leg
 from domain.value_objects.option_type import OptionType
 
@@ -83,3 +84,28 @@ class Strategy:
         La UI la muestra con el nombre "P&L inicial".
         """
         return -sum(leg.signed_quantity * leg.premium for leg in self.legs) * self.multiplier
+
+    def aggregate_greeks(self, per_leg: Sequence[Greeks]) -> Greeks:
+        """Combina los griegos de cada pata en el total de la estrategia.
+
+        Recibe una lista con un Greeks por pata, en el mismo orden que
+        `self.legs`, y los pesa por cantidad con signo y multiplicador.
+
+        Strategy hace este paso, y no Greeks, porque es quien conoce los pesos.
+        Greeks solo sabe escalarse y sumarse; ignora que existen las patas.
+
+        De donde salgan esos griegos no es asunto de este metodo: pueden venir
+        de Black-Scholes, de un arbol binomial o de una simulacion. Esa
+        indiferencia es el punto — la agregacion es del negocio, el calculo es
+        del modelo.
+        """
+        if len(per_leg) != len(self.legs):
+            raise ValueError(
+                f"Se esperaba un Greeks por pata: hay {len(self.legs)} patas "
+                f"y llegaron {len(per_leg)} griegos"
+            )
+
+        total = Greeks.zero()
+        for leg, greeks in zip(self.legs, per_leg):
+            total = total + greeks.scaled_by(leg.signed_quantity * self.multiplier)
+        return total

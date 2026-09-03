@@ -46,7 +46,7 @@ El plan completo, las decisiones de diseño y el porqué de cada paso están en
 | Fase | Estado |
 |---|---|
 | 0 · Red de seguridad (16 tests) | ✅ |
-| 1 · Dominio puro | ⬜ |
+| 1 · Dominio puro | ✅ |
 | 2 · Puertos | ⬜ |
 | 3 · Casos de uso | ⬜ |
 | 4 · Adaptadores | ⬜ |

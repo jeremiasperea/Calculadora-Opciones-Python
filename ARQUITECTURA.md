@@ -141,7 +141,7 @@ salió `TestMultiplicador`.
 > **Lección:** un parámetro con valor neutro (1 al multiplicar, 0 al sumar)
 > nunca debe testearse sólo con ese valor.
 
-### Fase 1 — Dominio puro
+### Fase 1 — Dominio puro ✅ COMPLETA
 
 `domain/` sin un solo import externo. Ni SciPy, ni Pandas, ni Flet.
 

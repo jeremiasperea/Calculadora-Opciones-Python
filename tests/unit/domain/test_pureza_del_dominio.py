@@ -21,7 +21,11 @@ DOMINIO = Path(__file__).resolve().parents[3] / "domain"
 # numpy se permite a proposito: es una estructura de datos con operaciones
 # vectorizadas, no infraestructura. No hace I/O ni habla con nada externo.
 # La regla es "sin frameworks, sin I/O, sin base de datos", no "solo stdlib".
-PERMITIDOS = {"numpy", "dataclasses", "enum", "typing", "abc", "math", "domain"}
+PERMITIDOS = {
+    "numpy", "dataclasses", "enum", "typing", "abc", "math",
+    "__future__",  # solo habilita anotaciones diferidas, no trae nada
+    "domain",
+}
 
 PROHIBIDOS = {
     "scipy": "modelo de pricing -> infrastructure/adapters/",
